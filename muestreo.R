@@ -61,6 +61,3 @@ muestreo <- function(x,PX=0.1,d=4) {
   return(res)
 }
 
-#x <- c(1,2,3,4,5,6,7)
-x <- c(166,42,27,23,2767,9,477,85,4,131,48)
-a<-muestreo(x,0.05)
