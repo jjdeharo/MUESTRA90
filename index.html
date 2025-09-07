@@ -561,10 +561,16 @@
   </style>
   <script>
     window.MathJax = {
-      tex: { inlineMath: [["\\(","\\)"],["$","$"]], displayMath: [["\\[","\\]"],["$$","$$"]] }
+      tex: { inlineMath: [["\\(","\\)"],["$","$"]], displayMath: [["\\[","\\]"],["$$","$$"]] },
+      startup: {
+        ready: () => {
+          MathJax.startup.defaultReady();
+          MathJax.typesetPromise().then(() => { setTimeout(() => { window.print(); }, 100); });
+        }
+      }
     };
   <\/script>
-  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"><\/script>
+  <script id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"><\/script>
 </head>
 <body>
   <div class="wrap">
@@ -646,16 +652,7 @@
     </div>
 
   </div>
-  <script>
-    window.addEventListener('load', () => {
-      const doPrint = () => setTimeout(() => { window.print(); }, 100);
-      if (window.MathJax && MathJax.typesetPromise) {
-        MathJax.typesetPromise().then(doPrint).catch(doPrint);
-      } else {
-        doPrint();
-      }
-    });
-  <\/script>
+  
 </body>
 </html>`;
 
