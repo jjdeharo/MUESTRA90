@@ -59,6 +59,9 @@
     .pill.err { border-color: var(--err); color: var(--err); }
     .foot { margin-top: 20px; font-size: 0.9rem; color: var(--muted); }
     code { background: rgba(127,127,127,0.12); padding: 0 6px; border-radius: 6px; }
+    .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+    .list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .tag { border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; color: var(--muted); cursor: pointer; }
   </style>
   <script>
     function parseFrequencies(text) {
@@ -228,6 +231,7 @@
 
       const { a0, b, r2 } = linRegSlopeAndR2(i, ln);
       const W = Math.exp(b);
+      const a_lin = Math.exp(a0); // para la curva esperada a*W^i en escala lineal
 
       // Validaciones básicas
       let issues = [];
@@ -281,6 +285,17 @@
 
       // Gráfico ajuste ln(x) vs i
       renderFitPlot(i, ln, a0, b);
+
+      // Gráfico de frecuencias y curva esperada en escala lineal
+      renderFreqPlot(i, x, a_lin, W);
+
+      // Guardar resultados actuales para exportación
+      window.__lastResult = {
+        input: { frecuencias: xRaw, PX, decimales: d },
+        ajuste: { a0, b, W, R2: r2, M, N },
+        hipotesisA: { P, PX0, X: X_pred_round, extra: extraA, rechazaH0: rejetA },
+        hipotesisB: { P1, PX1, X1: X1_pred_round, extra: extraB, rechazaH2: rejetB }
+      };
     }
 
     function loadExample() {
@@ -290,6 +305,162 @@
       document.getElementById('dec').value = 4;
       calc();
     }
+
+    function renderFreqPlot(iArr, xArr, a, W) {
+      const container = document.getElementById('plot2');
+      container.innerHTML = '';
+      const Wd = 700, Hd = 380;
+      const m = {left: 64, right: 16, top: 12, bottom: 42};
+      const iw = Wd - m.left - m.right; const ih = Hd - m.top - m.bottom;
+      const xMin = 1, xMax = Math.max(...iArr);
+      const yMax = Math.max(...xArr);
+      const svgNS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(svgNS, 'svg');
+      svg.setAttribute('viewBox', `0 0 ${Wd} ${Hd}`);
+      svg.style.width = '100%';
+      svg.style.height = 'auto';
+      const xScale = v => m.left + (v - xMin) / (xMax - xMin) * iw;
+      const yScale = v => m.top + (1 - v / (yMax || 1)) * ih;
+
+      // Ejes
+      const axis = (x1,y1,x2,y2) => {
+        const l = document.createElementNS(svgNS, 'line');
+        l.setAttribute('x1', x1); l.setAttribute('y1', y1);
+        l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+        l.setAttribute('stroke', 'var(--border)');
+        l.setAttribute('stroke-width', '1');
+        svg.appendChild(l);
+      };
+      axis(m.left, m.top + ih, m.left + iw, m.top + ih);
+      axis(m.left, m.top, m.left, m.top + ih);
+
+      // Ticks X
+      for (let k = xMin; k <= xMax; k++) {
+        const x = xScale(k);
+        const tl = document.createElementNS(svgNS, 'line');
+        tl.setAttribute('x1', x); tl.setAttribute('y1', m.top + ih);
+        tl.setAttribute('x2', x); tl.setAttribute('y2', m.top + ih + 6);
+        tl.setAttribute('stroke', 'var(--border)'); svg.appendChild(tl);
+        const tx = document.createElementNS(svgNS, 'text');
+        tx.setAttribute('x', x); tx.setAttribute('y', m.top + ih + 20);
+        tx.setAttribute('text-anchor', 'middle'); tx.setAttribute('font-size', '12');
+        tx.setAttribute('fill', 'var(--muted)'); tx.textContent = String(k);
+        svg.appendChild(tx);
+      }
+      // Ticks Y en 5 pasos
+      const yticks = 5; const ymax = yMax;
+      for (let t = 0; t <= yticks; t++) {
+        const yv = (t/yticks) * ymax;
+        const y = yScale(yv);
+        const gl = document.createElementNS(svgNS, 'line');
+        gl.setAttribute('x1', m.left); gl.setAttribute('y1', y);
+        gl.setAttribute('x2', m.left + iw); gl.setAttribute('y2', y);
+        gl.setAttribute('stroke', 'var(--border)'); gl.setAttribute('stroke-width', '1'); gl.setAttribute('opacity', '0.5');
+        svg.appendChild(gl);
+        const txt = document.createElementNS(svgNS, 'text');
+        txt.setAttribute('x', m.left - 8); txt.setAttribute('y', y + 4); txt.setAttribute('text-anchor', 'end');
+        txt.setAttribute('font-size', '12'); txt.setAttribute('fill', 'var(--muted)'); txt.textContent = String(Math.round(yv*100)/100);
+        svg.appendChild(txt);
+      }
+
+      // Etiquetas
+      const xLabel = document.createElementNS(svgNS, 'text');
+      xLabel.setAttribute('x', m.left + iw/2); xLabel.setAttribute('y', Hd - 8);
+      xLabel.setAttribute('text-anchor', 'middle'); xLabel.setAttribute('font-size', '12'); xLabel.setAttribute('fill', 'var(--muted)');
+      xLabel.textContent = 'i (especies de menor a mayor)'; svg.appendChild(xLabel);
+      const yLabel = document.createElementNS(svgNS, 'text');
+      yLabel.setAttribute('transform', `translate(16 ${m.top + ih/2}) rotate(-90)`);
+      yLabel.setAttribute('text-anchor', 'middle'); yLabel.setAttribute('font-size', '12'); yLabel.setAttribute('fill', 'var(--muted)');
+      yLabel.textContent = 'frecuencia'; svg.appendChild(yLabel);
+
+      // Puntos observados
+      for (let idx = 0; idx < iArr.length; idx++) {
+        const cx = xScale(iArr[idx]); const cy = yScale(xArr[idx]);
+        const c = document.createElementNS(svgNS, 'circle');
+        c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', 4);
+        c.setAttribute('fill', 'var(--accent)'); c.setAttribute('opacity', '0.9');
+        svg.appendChild(c);
+      }
+      // Curva esperada y = a*W^i
+      const path = document.createElementNS(svgNS, 'path');
+      let d = '';
+      for (let k = xMin; k <= xMax; k++) {
+        const yhat = a * Math.pow(W, k);
+        const X = xScale(k), Y = yScale(yhat);
+        d += (k === xMin ? 'M' : 'L') + X + ' ' + Y + ' ';
+      }
+      path.setAttribute('d', d.trim()); path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', 'var(--ok)'); path.setAttribute('stroke-width', '2');
+      svg.appendChild(path);
+
+      container.appendChild(svg);
+    }
+
+    function download(filename, text) {
+      const a = document.createElement('a');
+      a.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+      a.setAttribute('download', filename);
+      a.style.display = 'none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
+
+    function exportJSON() {
+      if (!window.__lastResult) { alert('Primero calcula resultados.'); return; }
+      download('muestreo_resultados.json', JSON.stringify(window.__lastResult, null, 2));
+    }
+
+    function exportCSV() {
+      if (!window.__lastResult) { alert('Primero calcula resultados.'); return; }
+      const r = window.__lastResult;
+      const lines = [];
+      lines.push('clave,valor');
+      lines.push(`M,${r.ajuste.M}`);
+      lines.push(`N,${r.ajuste.N}`);
+      lines.push(`b,${r.ajuste.b}`);
+      lines.push(`W,${r.ajuste.W}`);
+      lines.push(`R2,${r.ajuste.R2}`);
+      lines.push(`P,${r.hipotesisA.P}`);
+      lines.push(`PX0,${r.hipotesisA.PX0}`);
+      lines.push(`X,${r.hipotesisA.X}`);
+      lines.push(`extraA,${r.hipotesisA.extra}`);
+      lines.push(`rechazaH0,${r.hipotesisA.rechazaH0}`);
+      lines.push(`P1,${r.hipotesisB.P1}`);
+      lines.push(`PX1,${r.hipotesisB.PX1}`);
+      lines.push(`X1,${r.hipotesisB.X1}`);
+      lines.push(`extraB,${r.hipotesisB.extra}`);
+      lines.push(`rechazaH2,${r.hipotesisB.rechazaH2}`);
+      download('muestreo_resultados.csv', lines.join('\n'));
+    }
+
+    function listDatasets() {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('dataset:')).map(k => k.slice(8));
+      const wrap = document.getElementById('datasets');
+      wrap.innerHTML = '';
+      keys.sort().forEach(name => {
+        const el = document.createElement('span');
+        el.className = 'tag'; el.textContent = name;
+        el.title = 'Click para cargar';
+        el.onclick = () => loadDataset(name);
+        wrap.appendChild(el);
+      });
+    }
+
+    function saveDataset() {
+      const name = prompt('Nombre del dataset');
+      if (!name) return;
+      const freqText = document.getElementById('freq').value;
+      localStorage.setItem('dataset:' + name, freqText);
+      listDatasets();
+    }
+
+    function loadDataset(name) {
+      const key = 'dataset:' + (name || prompt('Nombre a cargar'));
+      const data = localStorage.getItem(key);
+      if (!data) { alert('No existe ese dataset.'); return; }
+      document.getElementById('freq').value = data;
+      calc();
+    }
+
+    window.addEventListener('DOMContentLoaded', listDatasets);
   </script>
   </head>
   <body>
@@ -319,9 +490,13 @@
               <input type="number" id="dec" min="0" max="10" step="1" value="4">
             </div>
           </div>
-          <div style="margin-top:12px; display:flex; gap:10px;">
+          <div style="margin-top:12px;" class="btns">
             <button onclick="calc()">Calcular</button>
+            <button class="secondary" onclick="exportJSON()">Exportar JSON</button>
+            <button class="secondary" onclick="exportCSV()">Exportar CSV</button>
+            <button class="secondary" onclick="saveDataset()">Guardar dataset</button>
           </div>
+          <div class="list" id="datasets" aria-label="Datasets guardados"></div>
           <div class="foot">Las frecuencias se ordenan de menor a mayor. Se calcula <code>W = e^b</code> ajustando <code>ln(x)</code> contra <code>i = 1..M</code>.</div>
         </div>
 
@@ -367,6 +542,12 @@
         <h2>Gráfico del ajuste ln(x) vs i</h2>
         <div id="plot"></div>
         <div class="foot">Puntos: ln(frecuencia) por especie; línea: regresión <code>ln(x) = a + b·i</code>.</div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <h2>Frecuencias y curva esperada</h2>
+        <div id="plot2"></div>
+        <div class="foot">Puntos: frecuencia observada; curva: <code>a·W^i</code> estimada desde el ajuste (escala lineal).</div>
       </div>
 
       <p class="foot">Notas: Usa logaritmo neperiano. Si W ≤ 1, el ajuste exponencial no es válido. Las fórmulas siguen el documento “muestreo-faunistico.md”.</p>
