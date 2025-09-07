@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Muestreo Faunístico — Calculadora</title>
   <meta name="color-scheme" content="light dark">
+  <script>
+    // Configuración de MathJax para TeX en línea y de bloque
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(','\\)'], ['$', '$']],
+        displayMath: [['\\[','\\]'], ['$$','$$']]
+      },
+      options: { renderActions: { addMenu: [] } }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   <style>
     :root {
       --bg: #ffffff;
@@ -295,10 +306,10 @@
       document.getElementById('stat-R2').textContent = fmt(r2);
       document.getElementById('stat-RMSEln').textContent = fmt(rmseLn);
       let interpLn = '';
-      if (W <= 1) interpLn = 'W ≤ 1: el ajuste no es válido; recolecta más datos.';
-      else if (r2 >= 0.9) interpLn = 'R² alto y W > 1: ajuste exponencial plausible.';
-      else if (r2 >= 0.7) interpLn = 'R² moderado: usa los resultados con cautela.';
-      else interpLn = 'R² bajo: el ajuste es pobre; recolecta más datos.';
+      if (W <= 1) interpLn = '\\(W \\le 1\\): el ajuste no es válido; recolecta más datos.';
+      else if (r2 >= 0.9) interpLn = '\\(R^2\\) alto y \\(W>1\\): ajuste exponencial plausible.';
+      else if (r2 >= 0.7) interpLn = '\\(R^2\\) moderado: usa los resultados con cautela.';
+      else interpLn = '\\(R^2\\) bajo: el ajuste es pobre; recolecta más datos.';
       document.getElementById('interp-ln').textContent = interpLn;
 
       // Gráfico de frecuencias y curva esperada en escala lineal
@@ -314,6 +325,28 @@
       document.getElementById('stat-MAE').textContent = fmt(mae);
       document.getElementById('stat-RMSE').textContent = fmt(rmse);
       document.getElementById('stat-MAPE').textContent = fmt(mape);
+
+      // Intervalo de probabilidad (%) de que queden especies
+      const fmtPct = v => isFinite(v) ? (String(roundTo(v*100, d)) + '%') : '—';
+      const pmin = Math.min(PX0, PX1);
+      const pmax = Math.max(PX0, PX1);
+      const intervalText = (isFinite(pmin) && isFinite(pmax)) ? `${fmtPct(pmin)} – ${fmtPct(pmax)}` : '—';
+      const intervalEl = document.getElementById('res-prob-interval');
+      if (intervalEl) intervalEl.textContent = intervalText;
+
+      // Interpretación textual
+      let interpMsg = '';
+      if (rejetA && rejetB) {
+        interpMsg = 'Ambas hipótesis rechazadas: muestreo probablemente completo al nivel elegido.';
+      } else if (rejetA && !rejetB) {
+        const extraTxt = isFinite(extraB) ? ` Recolecta ≈ ${extraB} ejemplares más.` : '';
+        interpMsg = 'H0 rechazada y H2 no rechazada: podría quedar 1 especie.' + extraTxt;
+      } else {
+        const extraTxt = isFinite(extraA) ? ` Recolecta ≈ ${extraA} ejemplares más.` : '';
+        interpMsg = 'H0 no rechazada: probablemente queden especies.' + extraTxt;
+      }
+      const interpEl = document.getElementById('res-interpret');
+      if (interpEl) interpEl.textContent = interpMsg;
       let interpFreq = '';
       if (!isFinite(mape)) interpFreq = 'No se pudo calcular MAPE (frecuencias no positivas).';
       else if (mape < 10) interpFreq = 'MAPE < 10%: muy buen ajuste de la curva a·W^i.';
@@ -329,11 +362,22 @@
         hipotesisB: { P1, PX1, X1: X1_pred_round, extra: extraB, rechazaH2: rejetB },
         escala_lineal: { a: a_lin, MAE: mae, RMSE: rmse, MAPE: mape }
       };
+      if (window.MathJax && MathJax.typesetPromise) { MathJax.typesetPromise(); }
     }
 
-    function loadExample() {
-      // Ejemplo simple
-      document.getElementById('freq').value = '5, 3, 2, 1';
+    function loadExample(n) {
+      // Ejemplos del documento muestreo-faunistico.md
+      // Ejemplo 1 (Liriomyza, Muestras 1–13): 1, 1, 17, 29, 104, 175 (X0 = 327)
+      // Ejemplo 2 (Pomatoschistus microps): 2, 14, 56, 81, 158, 178, 551, 587, 1324 (X0 = 3521 en doc)
+      let data = '';
+      if (n === 1) {
+        data = '1, 1, 17, 29, 104, 175';
+      } else if (n === 2) {
+        data = '2, 14, 56, 81, 158, 178, 551, 587, 1324';
+      } else {
+        data = '5, 3, 2, 1'; // fallback
+      }
+      document.getElementById('freq').value = data;
       document.getElementById('px').value = 0.1;
       document.getElementById('dec').value = 4;
       calc();
@@ -464,6 +508,151 @@
       download('muestreo_resultados.csv', lines.join('\n'));
     }
 
+    function exportPDF() {
+      if (!window.__lastResult) { alert('Primero calcula resultados.'); return; }
+      const r = window.__lastResult;
+      const d = r.input.decimales ?? 4;
+      const fmt = v => isFinite(v) ? String(roundTo(v, d)) : '—';
+      const fmtPct = v => isFinite(v) ? (String(roundTo(v*100, d)) + '%') : '—';
+      const freqs = (r.input.frecuencias || []).slice();
+      const svg1 = document.getElementById('plot')?.querySelector('svg');
+      const svg2 = document.getElementById('plot2')?.querySelector('svg');
+      const svg1html = svg1 ? svg1.outerHTML : '';
+      const svg2html = svg2 ? svg2.outerHTML : '';
+
+      const pmin = Math.min(r.hipotesisA.PX0, r.hipotesisB.PX1);
+      const pmax = Math.max(r.hipotesisA.PX0, r.hipotesisB.PX1);
+      const intervalo = (isFinite(pmin) && isFinite(pmax)) ? `${fmtPct(pmin)} – ${fmtPct(pmax)}` : '—';
+      let interpMsg = '';
+      if (r.hipotesisA.rechazaH0 && r.hipotesisB.rechazaH2) interpMsg = 'Ambas hipótesis rechazadas: muestreo probablemente completo al nivel elegido.';
+      else if (r.hipotesisA.rechazaH0 && !r.hipotesisB.rechazaH2) interpMsg = `H0 rechazada y H2 no rechazada: podría quedar 1 especie. Recolecta ≈ ${r.hipotesisB.extra} ejemplares más.`;
+      else interpMsg = `H0 no rechazada: probablemente queden especies. Recolecta ≈ ${r.hipotesisA.extra} ejemplares más.`;
+
+      const now = new Date();
+      const fecha = now.toLocaleString();
+
+      const html = `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Informe — Muestreo Faunístico</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --fg:#000; --muted:#555; --border:#ccc; --accent:#0ea5e9; --ok:#16a34a; }
+    html, body { margin:0; padding:0; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Helvetica, Arial; color: var(--fg); }
+    .wrap { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px 0; }
+    h2 { font-size: 1.15rem; margin: 18px 0 8px; }
+    .muted { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .box { border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    .kvs { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; }
+    .kvs .key { color: var(--muted); }
+    figure { margin: 12px 0; page-break-inside: avoid; }
+    svg { width: 100%; height: auto; }
+    @media print {
+      .no-print { display: none; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Informe — Muestreo Faunístico</h1>
+    <div class="muted">Generado: ${fecha}</div>
+
+    <h2>Entrada</h2>
+    <div class="box">
+      <div class="kvs">
+        <div class="key">Frecuencias (orden dadas)</div><div>${freqs.join(', ')}</div>
+        <div class="key">P(X) objetivo</div><div>${(r.input.PX !== undefined ? r.input.PX : '—')}</div>
+        <div class="key">Decimales</div><div>${d}</div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="box">
+        <h2>Datos y ajuste</h2>
+        <div class="kvs">
+          <div class="key">M (nº de especies)</div><div>${r.ajuste.M}</div>
+          <div class="key">N (total ejemplares)</div><div>${r.ajuste.N}</div>
+          <div class="key">b (pendiente ln)</div><div>${fmt(r.ajuste.b)}</div>
+          <div class="key">W = e^b</div><div>${fmt(r.ajuste.W)}</div>
+          <div class="key">R^2 (ln)</div><div>${fmt(r.ajuste.R2)}</div>
+          <div class="key">RMSE ln</div><div>${fmt(r.ajuste.RMSE_ln)}</div>
+        </div>
+      </div>
+      <div class="box">
+        <h2>Escala lineal</h2>
+        <div class="kvs">
+          <div class="key">a = e^{a0}</div><div>${fmt(r.escala_lineal.a)}</div>
+          <div class="key">MAE</div><div>${fmt(r.escala_lineal.MAE)}</div>
+          <div class="key">RMSE</div><div>${fmt(r.escala_lineal.RMSE)}</div>
+          <div class="key">MAPE (%)</div><div>${fmt(r.escala_lineal.MAPE)}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="box">
+        <h2>Hipótesis A — J grande</h2>
+        <div class="kvs">
+          <div class="key">P ≈ 1/W^M</div><div>${fmt(r.hipotesisA.P)}</div>
+          <div class="key">P(X0) = (1−P)^N</div><div>${fmt(r.hipotesisA.PX0)} (${fmtPct(r.hipotesisA.PX0)})</div>
+          <div class="key">X predicho</div><div>${r.hipotesisA.X}</div>
+          <div class="key">Ejemplares suplementarios</div><div>${r.hipotesisA.extra}</div>
+          <div class="key">Decisión</div><div>${r.hipotesisA.rechazaH0 ? 'H0 rechazada' : 'H0 no rechazada'}</div>
+        </div>
+      </div>
+      <div class="box">
+        <h2>Hipótesis B — queda 1 especie</h2>
+        <div class="kvs">
+          <div class="key">P(1) = (W−1)/(W^{M+1}−1)</div><div>${fmt(r.hipotesisB.P1)}</div>
+          <div class="key">P'(X0) = (1−P(1))^N</div><div>${fmt(r.hipotesisB.PX1)} (${fmtPct(r.hipotesisB.PX1)})</div>
+          <div class="key">X predicho</div><div>${r.hipotesisB.X1}</div>
+          <div class="key">Ejemplares suplementarios</div><div>${r.hipotesisB.extra}</div>
+          <div class="key">Decisión</div><div>${r.hipotesisB.rechazaH2 ? 'H2 rechazada' : 'H2 no rechazada'}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="box">
+      <h2>Probabilidad de que queden especies</h2>
+      <div class="kvs">
+        <div class="key">Intervalo estimado (%)</div><div>${intervalo}</div>
+      </div>
+      <div class="muted">${interpMsg}</div>
+    </div>
+
+    <div class="grid">
+      <div class="box">
+        <h2>Gráfico ln(x) vs i</h2>
+        <figure>${svg1html}</figure>
+      </div>
+      <div class="box">
+        <h2>Frecuencias y curva esperada</h2>
+        <figure>${svg2html}</figure>
+      </div>
+    </div>
+
+  </div>
+  <script>
+    window.addEventListener('load', () => { setTimeout(() => { window.print(); }, 200); });
+  <\/script>
+</body>
+</html>`;
+
+      const win = window.open('', '_blank');
+      if (!win) { alert('El bloqueador de ventanas impide abrir el informe.'); return; }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    }
+
     function listDatasets() {
       const keys = Object.keys(localStorage).filter(k => k.startsWith('dataset:')).map(k => k.slice(8));
       const wrap = document.getElementById('datasets');
@@ -501,10 +690,10 @@
       <header>
         <div>
           <h1>Muestreo Faunístico — Calculadora</h1>
-          <div class="muted">Implementa las fórmulas del documento y del script <code>muestreo.R</code>.</div>
         </div>
-        <div>
-          <button class="secondary" onclick="loadExample()">Cargar ejemplo</button>
+        <div class="btns">
+          <button class="secondary" title="Liriomyza, M=6, X0=327" onclick="loadExample(1)">Ejemplo 1</button>
+          <button class="secondary" title="P. microps, M=9, X0=3521" onclick="loadExample(2)">Ejemplo 2</button>
         </div>
       </header>
 
@@ -527,10 +716,11 @@
             <button onclick="calc()">Calcular</button>
             <button class="secondary" onclick="exportJSON()">Exportar JSON</button>
             <button class="secondary" onclick="exportCSV()">Exportar CSV</button>
+            <button class="secondary" onclick="exportPDF()">Informe PDF</button>
             <button class="secondary" onclick="saveDataset()">Guardar dataset</button>
           </div>
           <div class="list" id="datasets" aria-label="Datasets guardados"></div>
-          <div class="foot">Las frecuencias se ordenan de menor a mayor. Se calcula <code>W = e^b</code> ajustando <code>ln(x)</code> contra <code>i = 1..M</code>.</div>
+          <div class="foot">Las frecuencias se ordenan de menor a mayor. Se calcula \(W = e^{b}\) ajustando \(\ln(x)\) contra \(i = 1..M\).</div>
         </div>
 
         <div class="card">
@@ -538,49 +728,58 @@
           <div class="kvs">
             <div class="key">Número de especies (M)</div><div id="res-M">—</div>
             <div class="key">Total de ejemplares (N)</div><div id="res-N">—</div>
-            <div class="key">Pendiente (b)</div><div id="res-b">—</div>
-            <div class="key">W = e^b</div><div id="res-W">—</div>
-            <div class="key">R² (ajuste exponencial)</div><div id="res-r2">—</div>
+            <div class="key">Pendiente \((b)\)</div><div id="res-b">—</div>
+            <div class="key">\(W = e^{b}\)</div><div id="res-W">—</div>
+            <div class="key">\(R^2\) (ajuste exponencial)</div><div id="res-r2">—</div>
           </div>
         </div>
       </div>
 
       <div class="grid" style="margin-top:16px;">
         <div class="card">
-          <h2>Hipótesis A — J grande</h2>
+          <h2>Hipótesis A — \(J\) grande</h2>
           <div class="kvs">
-            <div class="key">P ≈ 1/W^M</div><div id="res-P">—</div>
-            <div class="key">P(X₀) = (1−P)^N</div><div id="res-PX0">—</div>
+            <div class="key">\(P \approx \dfrac{1}{W^{M}}\)</div><div id="res-P">—</div>
+            <div class="key">\(P(X_0) = (1-P)^{N}\)</div><div id="res-PX0">—</div>
             <div class="key">X predicho</div><div id="res-X">—</div>
             <div class="key">Ejemplares suplementarios</div><div id="res-extraA">—</div>
             <div class="key">Decisión</div><div id="res-decisionA" class="pill">—</div>
           </div>
-          <div class="foot">Rechaza H0 si P(X₀) ≤ P(X).</div>
+          <div class="foot">Rechaza \(H_0\) si \(P(X_0) \le P(X)\).</div>
         </div>
 
         <div class="card">
           <h2>Hipótesis B — queda 1 especie</h2>
           <div class="kvs">
-            <div class="key">P(1) = (W−1)/(W^{M+1}−1)</div><div id="res-P1">—</div>
-            <div class="key">P'(X₀) = (1−P(1))^N</div><div id="res-PX1">—</div>
+            <div class="key">\(P(1) = \dfrac{W-1}{W^{M+1}-1}\)</div><div id="res-P1">—</div>
+            <div class="key">\(P'(X_0) = (1-P(1))^{N}\)</div><div id="res-PX1">—</div>
             <div class="key">X predicho</div><div id="res-X1">—</div>
             <div class="key">Ejemplares suplementarios</div><div id="res-extraB">—</div>
             <div class="key">Decisión</div><div id="res-decisionB" class="pill">—</div>
           </div>
-          <div class="foot">Rechaza H2 si P'(X₀) ≤ P(X).</div>
+          <div class="foot">Rechaza \(H_2\) si \(P'(X_0) \le P(X)\).</div>
         </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <h2>Probabilidad de que queden especies</h2>
+        <div class="kvs">
+          <div class="key">Intervalo estimado (%)</div><div id="res-prob-interval">—</div>
+        </div>
+        <div class="foot">Basado en \(P(X_0)\) y \(P'(X_0)\) del método.</div>
+        <div class="foot" id="res-interpret">—</div>
       </div>
 
       <div class="card" style="margin-top:16px;">
         <h2>Gráfico del ajuste ln(x) vs i</h2>
         <div id="plot"></div>
-        <div class="foot">Puntos: ln(frecuencia) por especie; línea: regresión <code>ln(x) = a + b·i</code>.</div>
+        <div class="foot">Puntos: ln(frecuencia) por especie; línea: regresión \(\ln(x) = a + b\,i\).</div>
         <div style="margin-top:12px;">
           <div class="kvs">
-            <div class="key">W = e^b</div><div id="stat-W">—</div>
-            <div class="key">Pendiente (b)</div><div id="stat-b">—</div>
-            <div class="key">R²</div><div id="stat-R2">—</div>
-            <div class="key">RMSE ln</div><div id="stat-RMSEln">—</div>
+            <div class="key">\(W = e^{b}\)</div><div id="stat-W">—</div>
+            <div class="key">Pendiente \((b)\)</div><div id="stat-b">—</div>
+            <div class="key" title="Coeficiente de determinación del ajuste lineal en ln-espacio (0–1)">\(R^2\)</div><div id="stat-R2">—</div>
+            <div class="key" title="Raíz del error cuadrático medio en ln-espacio; menor es mejor">RMSE ln</div><div id="stat-RMSEln">—</div>
           </div>
           <div class="foot" id="interp-ln">—</div>
         </div>
@@ -589,19 +788,37 @@
       <div class="card" style="margin-top:16px;">
         <h2>Frecuencias y curva esperada</h2>
         <div id="plot2"></div>
-        <div class="foot">Puntos: frecuencia observada; curva: <code>a·W^i</code> estimada desde el ajuste (escala lineal).</div>
+        <div class="foot">Puntos: frecuencia observada; curva: \(a\,W^{i}\) estimada desde el ajuste (escala lineal).</div>
         <div style="margin-top:12px;">
           <div class="kvs">
-            <div class="key">a = e^a₀</div><div id="stat-a">—</div>
-            <div class="key">MAE</div><div id="stat-MAE">—</div>
-            <div class="key">RMSE</div><div id="stat-RMSE">—</div>
-            <div class="key">MAPE (%)</div><div id="stat-MAPE">—</div>
-          </div>
-          <div class="foot" id="interp-freq">—</div>
-        </div>
+            <div class="key">\(a = e^{a_0}\)</div><div id="stat-a">—</div>
+            <div class="key" title="Media del error absoluto; menor es mejor">MAE</div><div id="stat-MAE">—</div>
+            <div class="key" title="Raíz del error cuadrático medio; penaliza errores grandes">RMSE</div><div id="stat-RMSE">—</div>
+            <div class="key" title="Error porcentual absoluto medio; si hay x_i=0 no se calcula">MAPE (%)</div><div id="stat-MAPE">—</div>
       </div>
+      <div class="foot" id="interp-freq">—</div>
+    </div>
+  </div>
 
-      <p class="foot">Notas: Usa logaritmo neperiano. Si W ≤ 1, el ajuste exponencial no es válido. Las fórmulas siguen el documento “muestreo-faunistico.md”.</p>
+  <div class="card" style="margin-top:16px;">
+    <h2>Ayuda de métricas</h2>
+    <div class="foot">
+      \(\displaystyle \textbf{MAE}=\frac{1}{M}\sum_i |x_i-\hat y_i|\) — unidades: individuos; menor es mejor.
+    </div>
+    <div class="foot">
+      \(\displaystyle \textbf{RMSE}=\sqrt{\frac{1}{M}\sum_i (x_i-\hat y_i)^2}\) — unidades: individuos; penaliza errores grandes.
+    </div>
+    <div class="foot">
+      \(\displaystyle \textbf{MAPE}=\frac{100}{M}\sum_i \frac{|x_i-\hat y_i|}{x_i}\) — porcentaje; no se calcula si existe \(x_i=0\).
+    </div>
+    <div class="foot">
+      \(\displaystyle \textbf{RMSE\ ln}=\sqrt{\frac{1}{M}\sum_i (\ln x_i - (a_0 + b\,i))^2}\) — evalúa la linealidad en \(\ln\)-espacio; menor es mejor.
+    </div>
+    <div class="foot">
+      \(\textbf{R}^2\) — calidad del ajuste lineal en \(\ln\)-espacio (0–1); cercano a 1 indica buen ajuste.
+    </div>
+  </div>
+      <p class="foot">Notas: Usa logaritmo neperiano. Si \(W \le 1\), el ajuste exponencial no es válido. Las fórmulas siguen el documento “muestreo-faunistico.md”.</p>
     </div>
   </body>
   </html>
