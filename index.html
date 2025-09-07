@@ -88,7 +88,126 @@
       }
       const b = sxy / sxx; // pendiente
       const r2 = (sxy*sxy) / (sxx*syy || 1);
-      return { b, r2 };
+      const a0 = my - b*mx; // intercepto en ln-espacio
+      return { a0, b, r2, mx, my };
+    }
+
+    function renderFitPlot(iArr, lnArr, a0, b) {
+      const container = document.getElementById('plot');
+      container.innerHTML = '';
+      const W = 700, H = 380;
+      const m = {left: 64, right: 16, top: 12, bottom: 42};
+      const iw = W - m.left - m.right;
+      const ih = H - m.top - m.bottom;
+
+      const iMin = Math.min(...iArr);
+      const iMax = Math.max(...iArr);
+      const yMin = Math.min(...lnArr);
+      const yMax = Math.max(...lnArr);
+      const yPad = (yMax - yMin) * 0.08;
+      const ymax = yMax + yPad;
+      const ymin = yMin - yPad;
+
+      const xScale = i => m.left + (i - iMin) / (iMax - iMin) * iw;
+      const yScale = y => m.top + (ymax - y) / (ymax - ymin || 1) * ih;
+
+      const svgNS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(svgNS, 'svg');
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      svg.style.width = '100%';
+      svg.style.height = 'auto';
+
+      // Fondo opcional transparente
+
+      // Ejes
+      const axis = (x1,y1,x2,y2) => {
+        const l = document.createElementNS(svgNS, 'line');
+        l.setAttribute('x1', x1); l.setAttribute('y1', y1);
+        l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+        l.setAttribute('stroke', 'var(--border)');
+        l.setAttribute('stroke-width', '1');
+        svg.appendChild(l);
+      };
+      // X axis
+      axis(m.left, m.top + ih, m.left + iw, m.top + ih);
+      // Y axis
+      axis(m.left, m.top, m.left, m.top + ih);
+
+      // Ticks Y
+      const yticks = 5;
+      for (let t = 0; t <= yticks; t++) {
+        const yv = ymin + (t/yticks) * (ymax - ymin);
+        const y = yScale(yv);
+        const gl = document.createElementNS(svgNS, 'line');
+        gl.setAttribute('x1', m.left); gl.setAttribute('y1', y);
+        gl.setAttribute('x2', m.left + iw); gl.setAttribute('y2', y);
+        gl.setAttribute('stroke', 'var(--border)'); gl.setAttribute('stroke-width', '1'); gl.setAttribute('opacity', '0.5');
+        svg.appendChild(gl);
+        const txt = document.createElementNS(svgNS, 'text');
+        txt.setAttribute('x', m.left - 8); txt.setAttribute('y', y + 4);
+        txt.setAttribute('text-anchor', 'end');
+        txt.setAttribute('font-size', '12');
+        txt.setAttribute('fill', 'var(--muted)');
+        txt.textContent = (Math.round(yv*100)/100).toString();
+        svg.appendChild(txt);
+      }
+
+      // Ticks X en enteros
+      for (let k = iMin; k <= iMax; k++) {
+        const x = xScale(k);
+        const tl = document.createElementNS(svgNS, 'line');
+        tl.setAttribute('x1', x); tl.setAttribute('y1', m.top + ih);
+        tl.setAttribute('x2', x); tl.setAttribute('y2', m.top + ih + 6);
+        tl.setAttribute('stroke', 'var(--border)');
+        svg.appendChild(tl);
+        const tx = document.createElementNS(svgNS, 'text');
+        tx.setAttribute('x', x); tx.setAttribute('y', m.top + ih + 20);
+        tx.setAttribute('text-anchor', 'middle'); tx.setAttribute('font-size', '12');
+        tx.setAttribute('fill', 'var(--muted)');
+        tx.textContent = String(k);
+        svg.appendChild(tx);
+      }
+
+      // Etiquetas
+      const xLabel = document.createElementNS(svgNS, 'text');
+      xLabel.setAttribute('x', m.left + iw/2);
+      xLabel.setAttribute('y', H - 8);
+      xLabel.setAttribute('text-anchor', 'middle');
+      xLabel.setAttribute('font-size', '12');
+      xLabel.setAttribute('fill', 'var(--muted)');
+      xLabel.textContent = 'i (especies de menor a mayor)';
+      svg.appendChild(xLabel);
+
+      const yLabel = document.createElementNS(svgNS, 'text');
+      yLabel.setAttribute('transform', `translate(16 ${m.top + ih/2}) rotate(-90)`);
+      yLabel.setAttribute('text-anchor', 'middle');
+      yLabel.setAttribute('font-size', '12');
+      yLabel.setAttribute('fill', 'var(--muted)');
+      yLabel.textContent = 'ln(frecuencia)';
+      svg.appendChild(yLabel);
+
+      // Puntos
+      for (let idx = 0; idx < iArr.length; idx++) {
+        const cx = xScale(iArr[idx]);
+        const cy = yScale(lnArr[idx]);
+        const c = document.createElementNS(svgNS, 'circle');
+        c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', 4);
+        c.setAttribute('fill', 'var(--accent)');
+        c.setAttribute('opacity', '0.9');
+        svg.appendChild(c);
+      }
+
+      // Recta ajustada: y = a0 + b*i
+      const x1 = xScale(iMin), y1 = yScale(a0 + b * iMin);
+      const x2 = xScale(iMax), y2 = yScale(a0 + b * iMax);
+      const line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+      line.setAttribute('stroke', 'var(--ok)');
+      line.setAttribute('stroke-width', '2');
+      svg.appendChild(line);
+
+      container.appendChild(svg);
     }
 
     function calc() {
@@ -107,7 +226,7 @@
       const i = Array.from({length:M}, (_,k)=>k+1);
       const ln = x.map(v=>Math.log(v));
 
-      const { b, r2 } = linRegSlopeAndR2(i, ln);
+      const { a0, b, r2 } = linRegSlopeAndR2(i, ln);
       const W = Math.exp(b);
 
       // Validaciones básicas
@@ -159,6 +278,9 @@
       const pillB = document.getElementById('res-decisionB');
       pillB.textContent = rejetB ? 'H2 rechazada' : 'H2 no rechazada';
       pillB.className = 'pill ' + (rejetB ? 'ok' : 'warn');
+
+      // Gráfico ajuste ln(x) vs i
+      renderFitPlot(i, ln, a0, b);
     }
 
     function loadExample() {
@@ -241,8 +363,13 @@
         </div>
       </div>
 
+      <div class="card" style="margin-top:16px;">
+        <h2>Gráfico del ajuste ln(x) vs i</h2>
+        <div id="plot"></div>
+        <div class="foot">Puntos: ln(frecuencia) por especie; línea: regresión <code>ln(x) = a + b·i</code>.</div>
+      </div>
+
       <p class="foot">Notas: Usa logaritmo neperiano. Si W ≤ 1, el ajuste exponencial no es válido. Las fórmulas siguen el documento “muestreo-faunistico.md”.</p>
     </div>
   </body>
   </html>
-
