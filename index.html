@@ -286,15 +286,48 @@
       // Gráfico ajuste ln(x) vs i
       renderFitPlot(i, ln, a0, b);
 
+      // Estadísticos del ajuste ln: RMSE en ln-espacio
+      const lnHat = i.map(k => a0 + b * k);
+      const resLn = ln.map((v, idx) => v - lnHat[idx]);
+      const rmseLn = Math.sqrt(resLn.reduce((s,e)=>s + e*e, 0) / M);
+      document.getElementById('stat-W').textContent = fmt(W);
+      document.getElementById('stat-b').textContent = fmt(b);
+      document.getElementById('stat-R2').textContent = fmt(r2);
+      document.getElementById('stat-RMSEln').textContent = fmt(rmseLn);
+      let interpLn = '';
+      if (W <= 1) interpLn = 'W ≤ 1: el ajuste no es válido; recolecta más datos.';
+      else if (r2 >= 0.9) interpLn = 'R² alto y W > 1: ajuste exponencial plausible.';
+      else if (r2 >= 0.7) interpLn = 'R² moderado: usa los resultados con cautela.';
+      else interpLn = 'R² bajo: el ajuste es pobre; recolecta más datos.';
+      document.getElementById('interp-ln').textContent = interpLn;
+
       // Gráfico de frecuencias y curva esperada en escala lineal
       renderFreqPlot(i, x, a_lin, W);
+
+      // Estadísticos en escala lineal
+      const yhat = i.map(k => a_lin * Math.pow(W, k));
+      const err = x.map((v, idx) => v - yhat[idx]);
+      const mae = err.reduce((s,e)=>s + Math.abs(e), 0) / M;
+      const rmse = Math.sqrt(err.reduce((s,e)=>s + e*e, 0) / M);
+      const mape = x.reduce((s,v,idx)=> s + (v>0 ? Math.abs(err[idx]) / v : 0), 0) / M * 100;
+      document.getElementById('stat-a').textContent = fmt(a_lin);
+      document.getElementById('stat-MAE').textContent = fmt(mae);
+      document.getElementById('stat-RMSE').textContent = fmt(rmse);
+      document.getElementById('stat-MAPE').textContent = fmt(mape);
+      let interpFreq = '';
+      if (!isFinite(mape)) interpFreq = 'No se pudo calcular MAPE (frecuencias no positivas).';
+      else if (mape < 10) interpFreq = 'MAPE < 10%: muy buen ajuste de la curva a·W^i.';
+      else if (mape < 20) interpFreq = 'MAPE 10–20%: ajuste razonable.';
+      else interpFreq = 'MAPE ≥ 20%: ajuste pobre; considere más datos o revisar supuestos.';
+      document.getElementById('interp-freq').textContent = interpFreq;
 
       // Guardar resultados actuales para exportación
       window.__lastResult = {
         input: { frecuencias: xRaw, PX, decimales: d },
-        ajuste: { a0, b, W, R2: r2, M, N },
+        ajuste: { a0, b, W, R2: r2, RMSE_ln: rmseLn, M, N },
         hipotesisA: { P, PX0, X: X_pred_round, extra: extraA, rechazaH0: rejetA },
-        hipotesisB: { P1, PX1, X1: X1_pred_round, extra: extraB, rechazaH2: rejetB }
+        hipotesisB: { P1, PX1, X1: X1_pred_round, extra: extraB, rechazaH2: rejetB },
+        escala_lineal: { a: a_lin, MAE: mae, RMSE: rmse, MAPE: mape }
       };
     }
 
@@ -542,12 +575,30 @@
         <h2>Gráfico del ajuste ln(x) vs i</h2>
         <div id="plot"></div>
         <div class="foot">Puntos: ln(frecuencia) por especie; línea: regresión <code>ln(x) = a + b·i</code>.</div>
+        <div style="margin-top:12px;">
+          <div class="kvs">
+            <div class="key">W = e^b</div><div id="stat-W">—</div>
+            <div class="key">Pendiente (b)</div><div id="stat-b">—</div>
+            <div class="key">R²</div><div id="stat-R2">—</div>
+            <div class="key">RMSE ln</div><div id="stat-RMSEln">—</div>
+          </div>
+          <div class="foot" id="interp-ln">—</div>
+        </div>
       </div>
 
       <div class="card" style="margin-top:16px;">
         <h2>Frecuencias y curva esperada</h2>
         <div id="plot2"></div>
         <div class="foot">Puntos: frecuencia observada; curva: <code>a·W^i</code> estimada desde el ajuste (escala lineal).</div>
+        <div style="margin-top:12px;">
+          <div class="kvs">
+            <div class="key">a = e^a₀</div><div id="stat-a">—</div>
+            <div class="key">MAE</div><div id="stat-MAE">—</div>
+            <div class="key">RMSE</div><div id="stat-RMSE">—</div>
+            <div class="key">MAPE (%)</div><div id="stat-MAPE">—</div>
+          </div>
+          <div class="foot" id="interp-freq">—</div>
+        </div>
       </div>
 
       <p class="foot">Notas: Usa logaritmo neperiano. Si W ≤ 1, el ajuste exponencial no es válido. Las fórmulas siguen el documento “muestreo-faunistico.md”.</p>
