@@ -72,7 +72,9 @@
     code { background: rgba(127,127,127,0.12); padding: 0 6px; border-radius: 6px; }
     .btns { display: flex; gap: 10px; flex-wrap: wrap; }
     .list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-    .tag { border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; color: var(--muted); cursor: pointer; }
+    .tag { border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .tag .del { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border); color: var(--muted); background: transparent; font-weight: 700; line-height: 1; cursor: pointer; }
+    .tag .del:hover { color: var(--err); border-color: var(--err); }
   </style>
   <script>
     function parseFrequencies(text) {
@@ -668,11 +670,21 @@
       const wrap = document.getElementById('datasets');
       wrap.innerHTML = '';
       keys.sort().forEach(name => {
-        const el = document.createElement('span');
-        el.className = 'tag'; el.textContent = name;
-        el.title = 'Click para cargar';
-        el.onclick = () => loadDataset(name);
-        wrap.appendChild(el);
+        const chip = document.createElement('span');
+        chip.className = 'tag';
+        chip.title = 'Click para cargar';
+        chip.onclick = () => loadDataset(name);
+        const label = document.createElement('span');
+        label.textContent = name;
+        const del = document.createElement('button');
+        del.className = 'del';
+        del.type = 'button';
+        del.setAttribute('aria-label', 'Borrar dataset');
+        del.textContent = '×';
+        del.onclick = (e) => { e.stopPropagation(); deleteDataset(name); };
+        chip.appendChild(label);
+        chip.appendChild(del);
+        wrap.appendChild(chip);
       });
     }
 
@@ -684,6 +696,22 @@
       listDatasets();
     }
 
+    function deleteDataset(name) {
+      if (!name) return;
+      const ok = confirm(`¿Borrar el dataset "${name}"?`);
+      if (!ok) return;
+      localStorage.removeItem('dataset:' + name);
+      listDatasets();
+    }
+
+    function clearAllDatasets() {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('dataset:'));
+      if (!keys.length) { alert('No hay datasets.'); return; }
+      const ok = confirm('¿Borrar TODOS los datasets guardados?');
+      if (!ok) return;
+      keys.forEach(k => localStorage.removeItem(k));
+      listDatasets();
+    }
     function loadDataset(name) {
       const key = 'dataset:' + (name || prompt('Nombre a cargar'));
       const data = localStorage.getItem(key);
@@ -728,6 +756,7 @@
             <button class="secondary" onclick="exportCSV()">Exportar CSV</button>
             <button class="secondary" onclick="exportPDF()">Informe PDF</button>
             <button class="secondary" onclick="saveDataset()">Guardar dataset</button>
+            <button class="secondary" onclick="clearAllDatasets()">Borrar todos</button>
           </div>
           <div class="list" id="datasets" aria-label="Datasets guardados"></div>
           <div class="foot">Las frecuencias se ordenan de menor a mayor. Se calcula \(W = e^{b}\) ajustando \(\ln(x)\) contra \(i = 1..M\).</div>
