@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Muestreo Faunístico — Calculadora</title>
+  <meta name="color-scheme" content="light dark">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #1f2937;
+      --muted: #6b7280;
+      --card: #f8fafc;
+      --border: #e5e7eb;
+      --accent: #0ea5e9;
+      --ok: #16a34a;
+      --warn: #b45309;
+      --err: #dc2626;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1020;
+        --fg: #e5e7eb;
+        --muted: #9ca3af;
+        --card: #0f172a;
+        --border: #1f2937;
+        --accent: #38bdf8;
+        --ok: #22c55e;
+        --warn: #f59e0b;
+        --err: #ef4444;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; padding: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg); color: var(--fg);
+    }
+    .container { max-width: 1000px; margin: 0 auto; padding: 24px; }
+    header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px 0; }
+    .muted { color: var(--muted); font-size: 0.95rem; }
+    .grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
+    @media (min-width: 800px) { .grid { grid-template-columns: 1fr 1fr; } }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .card h2 { margin: 0 0 10px 0; font-size: 1.1rem; }
+    label { display: block; font-weight: 600; margin: 10px 0 6px; }
+    input[type="number"], textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--fg); }
+    textarea { min-height: 120px; resize: vertical; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .row > div { flex: 1 1 160px; }
+    button { appearance: none; border: 1px solid var(--accent); background: var(--accent); color: #001018; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+    button.secondary { background: transparent; color: var(--accent); }
+    .kvs { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; }
+    .kvs div.key { color: var(--muted); }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: transparent; font-size: 0.85rem; }
+    .pill.ok { border-color: var(--ok); color: var(--ok); }
+    .pill.warn { border-color: var(--warn); color: var(--warn); }
+    .pill.err { border-color: var(--err); color: var(--err); }
+    .foot { margin-top: 20px; font-size: 0.9rem; color: var(--muted); }
+    code { background: rgba(127,127,127,0.12); padding: 0 6px; border-radius: 6px; }
+  </style>
+  <script>
+    function parseFrequencies(text) {
+      const nums = (text || "")
+        .replace(/\n/g, ' ')
+        .split(/[;,\s]+/)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(Number)
+        .filter(v => isFinite(v) && v > 0);
+      return nums;
+    }
+
+    function roundTo(x, d) {
+      const f = Math.pow(10, d);
+      return Math.round((x + Number.EPSILON) * f) / f;
+    }
+
+    function linRegSlopeAndR2(x, y) {
+      const n = x.length;
+      const mean = arr => arr.reduce((a,b)=>a+b,0) / n;
+      const mx = mean(x), my = mean(y);
+      let sxx=0, syy=0, sxy=0;
+      for (let i=0;i<n;i++) {
+        const dx = x[i]-mx, dy = y[i]-my;
+        sxx += dx*dx; syy += dy*dy; sxy += dx*dy;
+      }
+      const b = sxy / sxx; // pendiente
+      const r2 = (sxy*sxy) / (sxx*syy || 1);
+      return { b, r2 };
+    }
+
+    function calc() {
+      const freqText = document.getElementById('freq').value;
+      const PX = Number(document.getElementById('px').value);
+      const d = Number(document.getElementById('dec').value);
+
+      const xRaw = parseFrequencies(freqText);
+      if (xRaw.length < 2) {
+        alert('Introduce al menos 2 frecuencias (> 0).');
+        return;
+      }
+      const x = [...xRaw].sort((a,b)=>a-b);
+      const M = x.length;
+      const N = x.reduce((a,b)=>a+b,0);
+      const i = Array.from({length:M}, (_,k)=>k+1);
+      const ln = x.map(v=>Math.log(v));
+
+      const { b, r2 } = linRegSlopeAndR2(i, ln);
+      const W = Math.exp(b);
+
+      // Validaciones básicas
+      let issues = [];
+      if (!(W > 1)) issues.push('W ≤ 1, ajuste no válido.');
+      if (!(PX > 0 && PX < 1)) issues.push('P(X) debe estar entre 0 y 1.');
+      if (issues.length) {
+        alert(issues.join('\n'));
+        return;
+      }
+
+      // Hipótesis A (J grande)
+      const P = Math.pow(W, -M);
+      const PX0 = Math.pow(1 - P, N);
+      const X_pred = Math.log(PX) / Math.log(1 - P);
+      const X_pred_round = Math.round(X_pred);
+      const extraA = Math.max(0, X_pred_round - N);
+      const rejetA = PX0 <= PX;
+
+      // Hipótesis B (queda 1 especie)
+      const denom = Math.pow(W, M+1) - 1;
+      const P1 = (W - 1) / denom;
+      const PX1 = Math.pow(1 - P1, N);
+      const X1_pred = Math.log(PX) / Math.log(1 - P1);
+      const X1_pred_round = Math.round(X1_pred);
+      const extraB = Math.max(0, X1_pred_round - N);
+      const rejetB = PX1 <= PX;
+
+      // Escribe resultados
+      const fmt = v => isFinite(v) ? String(roundTo(v, d)) : '—';
+      document.getElementById('res-W').textContent = fmt(W);
+      document.getElementById('res-b').textContent = fmt(b);
+      document.getElementById('res-r2').textContent = fmt(r2);
+      document.getElementById('res-M').textContent = M;
+      document.getElementById('res-N').textContent = N;
+
+      document.getElementById('res-P').textContent = fmt(P);
+      document.getElementById('res-PX0').textContent = fmt(PX0);
+      document.getElementById('res-X').textContent = isFinite(X_pred_round) ? X_pred_round : '—';
+      document.getElementById('res-extraA').textContent = isFinite(extraA) ? extraA : '—';
+      const pillA = document.getElementById('res-decisionA');
+      pillA.textContent = rejetA ? 'H0 rechazada' : 'H0 no rechazada';
+      pillA.className = 'pill ' + (rejetA ? 'ok' : 'warn');
+
+      document.getElementById('res-P1').textContent = fmt(P1);
+      document.getElementById('res-PX1').textContent = fmt(PX1);
+      document.getElementById('res-X1').textContent = isFinite(X1_pred_round) ? X1_pred_round : '—';
+      document.getElementById('res-extraB').textContent = isFinite(extraB) ? extraB : '—';
+      const pillB = document.getElementById('res-decisionB');
+      pillB.textContent = rejetB ? 'H2 rechazada' : 'H2 no rechazada';
+      pillB.className = 'pill ' + (rejetB ? 'ok' : 'warn');
+    }
+
+    function loadExample() {
+      // Ejemplo simple
+      document.getElementById('freq').value = '5, 3, 2, 1';
+      document.getElementById('px').value = 0.1;
+      document.getElementById('dec').value = 4;
+      calc();
+    }
+  </script>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div>
+          <h1>Muestreo Faunístico — Calculadora</h1>
+          <div class="muted">Implementa las fórmulas del documento y del script <code>muestreo.R</code>.</div>
+        </div>
+        <div>
+          <button class="secondary" onclick="loadExample()">Cargar ejemplo</button>
+        </div>
+      </header>
+
+      <div class="grid" style="margin-top:16px;">
+        <div class="card">
+          <h2>Entrada</h2>
+          <label for="freq">Frecuencias por especie (absolutas o relativas)</label>
+          <textarea id="freq" placeholder="Ej: 5, 3, 2, 1 o 5 3 2 1"></textarea>
+          <div class="row">
+            <div>
+              <label for="px">P(X) objetivo (error tipo I)</label>
+              <input type="number" id="px" min="0.0001" max="0.5" step="0.001" value="0.1">
+            </div>
+            <div>
+              <label for="dec">Decimales</label>
+              <input type="number" id="dec" min="0" max="10" step="1" value="4">
+            </div>
+          </div>
+          <div style="margin-top:12px; display:flex; gap:10px;">
+            <button onclick="calc()">Calcular</button>
+          </div>
+          <div class="foot">Las frecuencias se ordenan de menor a mayor. Se calcula <code>W = e^b</code> ajustando <code>ln(x)</code> contra <code>i = 1..M</code>.</div>
+        </div>
+
+        <div class="card">
+          <h2>Datos y ajuste</h2>
+          <div class="kvs">
+            <div class="key">Número de especies (M)</div><div id="res-M">—</div>
+            <div class="key">Total de ejemplares (N)</div><div id="res-N">—</div>
+            <div class="key">Pendiente (b)</div><div id="res-b">—</div>
+            <div class="key">W = e^b</div><div id="res-W">—</div>
+            <div class="key">R² (ajuste exponencial)</div><div id="res-r2">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:16px;">
+        <div class="card">
+          <h2>Hipótesis A — J grande</h2>
+          <div class="kvs">
+            <div class="key">P ≈ 1/W^M</div><div id="res-P">—</div>
+            <div class="key">P(X₀) = (1−P)^N</div><div id="res-PX0">—</div>
+            <div class="key">X predicho</div><div id="res-X">—</div>
+            <div class="key">Ejemplares suplementarios</div><div id="res-extraA">—</div>
+            <div class="key">Decisión</div><div id="res-decisionA" class="pill">—</div>
+          </div>
+          <div class="foot">Rechaza H0 si P(X₀) ≤ P(X).</div>
+        </div>
+
+        <div class="card">
+          <h2>Hipótesis B — queda 1 especie</h2>
+          <div class="kvs">
+            <div class="key">P(1) = (W−1)/(W^{M+1}−1)</div><div id="res-P1">—</div>
+            <div class="key">P'(X₀) = (1−P(1))^N</div><div id="res-PX1">—</div>
+            <div class="key">X predicho</div><div id="res-X1">—</div>
+            <div class="key">Ejemplares suplementarios</div><div id="res-extraB">—</div>
+            <div class="key">Decisión</div><div id="res-decisionB" class="pill">—</div>
+          </div>
+          <div class="foot">Rechaza H2 si P'(X₀) ≤ P(X).</div>
+        </div>
+      </div>
+
+      <p class="foot">Notas: Usa logaritmo neperiano. Si W ≤ 1, el ajuste exponencial no es válido. Las fórmulas siguen el documento “muestreo-faunistico.md”.</p>
+    </div>
+  </body>
+  </html>
+
