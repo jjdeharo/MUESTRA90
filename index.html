@@ -561,7 +561,13 @@
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
-  
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [["\\(","\\)"],["$","$"]], displayMath: [["\\[","\\]"],["$$","$$"]] },
+      startup: { ready: () => { MathJax.startup.defaultReady(); MathJax.typesetPromise().then(() => setTimeout(() => window.print(), 100)); } }
+    };
+  <\/script>
+  <script id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"><\/script>
 </head>
 <body>
   <div class="wrap">
@@ -584,15 +590,15 @@
           <div class="key">M (nº de especies)</div><div>${r.ajuste.M}</div>
           <div class="key">N (total ejemplares)</div><div>${r.ajuste.N}</div>
           <div class="key">b (pendiente ln)</div><div>${fmt(r.ajuste.b)}</div>
-          <div class="key">W = e<sup>b</sup></div><div>${fmt(r.ajuste.W)}</div>
-          <div class="key">R² (ln)</div><div>${fmt(r.ajuste.R2)}</div>
+          <div class="key">\(W = e^{b}\)</div><div>${fmt(r.ajuste.W)}</div>
+          <div class="key">\(R^2\) (ln)</div><div>${fmt(r.ajuste.R2)}</div>
           <div class="key">RMSE ln</div><div>${fmt(r.ajuste.RMSE_ln)}</div>
         </div>
       </div>
       <div class="box">
         <h2>Escala lineal</h2>
         <div class="kvs">
-          <div class="key">a = e<sup>a₀</sup></div><div>${fmt(r.escala_lineal.a)}</div>
+          <div class="key">\(a = e^{a_0}\)</div><div>${fmt(r.escala_lineal.a)}</div>
           <div class="key">MAE</div><div>${fmt(r.escala_lineal.MAE)}</div>
           <div class="key">RMSE</div><div>${fmt(r.escala_lineal.RMSE)}</div>
           <div class="key">MAPE (%)</div><div>${fmt(r.escala_lineal.MAPE)}</div>
@@ -604,8 +610,8 @@
       <div class="box">
         <h2>Hipótesis A — \(J\) grande</h2>
         <div class="kvs">
-          <div class="key">P ≈ 1/W<sup>M</sup></div><div>${fmt(r.hipotesisA.P)}</div>
-          <div class="key">P(X₀) = (1−P)<sup>N</sup></div><div>${fmt(r.hipotesisA.PX0)} (${fmtPct(r.hipotesisA.PX0)})</div>
+          <div class="key">\(P \approx 1/W^{M}\)</div><div>${fmt(r.hipotesisA.P)}</div>
+          <div class="key">\(P(X_0) = (1-P)^{N}\)</div><div>${fmt(r.hipotesisA.PX0)} (${fmtPct(r.hipotesisA.PX0)})</div>
           <div class="key">X predicho</div><div>${r.hipotesisA.X}</div>
           <div class="key">Ejemplares suplementarios</div><div>${r.hipotesisA.extra}</div>
           <div class="key">Decisión</div><div>${r.hipotesisA.rechazaH0 ? 'H0 rechazada' : 'H0 no rechazada'}</div>
@@ -614,8 +620,8 @@
       <div class="box">
         <h2>Hipótesis B — queda 1 especie</h2>
         <div class="kvs">
-          <div class="key">P(1) = (W−1)/(W<sup>M+1</sup>−1)</div><div>${fmt(r.hipotesisB.P1)}</div>
-          <div class="key">P'(X₀) = (1−P(1))<sup>N</sup></div><div>${fmt(r.hipotesisB.PX1)} (${fmtPct(r.hipotesisB.PX1)})</div>
+          <div class="key">\(P(1) = \dfrac{W-1}{W^{M+1}-1}\)</div><div>${fmt(r.hipotesisB.P1)}</div>
+          <div class="key">\(P'(X_0) = (1-P(1))^{N}\)</div><div>${fmt(r.hipotesisB.PX1)} (${fmtPct(r.hipotesisB.PX1)})</div>
           <div class="key">X predicho</div><div>${r.hipotesisB.X1}</div>
           <div class="key">Ejemplares suplementarios</div><div>${r.hipotesisB.extra}</div>
           <div class="key">Decisión</div><div>${r.hipotesisB.rechazaH2 ? 'H2 rechazada' : 'H2 no rechazada'}</div>
